@@ -7,7 +7,14 @@ import transformers
 from peft import PeftModel
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+
+from sparseml.core.framework import Framework
+import sparseml.core.session as session_manager
+from sparseml.pytorch.model_load.helpers import apply_recipe_structure_to_model
+from sparseml.transformers.sparsification.obcq.export import load_task_model
+import os
+import math
 
 from .. import constants, utils
 
@@ -88,7 +95,20 @@ def huggingface_local_completions(
         use_fast=is_fast_tokenizer,
         **model_kwargs,
     )
-    model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
+
+    recipe_file = os.path.join(model_name, "recipe.yaml")
+    if os.path.exists(recipe_file):
+        config = AutoConfig.from_pretrained(
+            model_name,
+            trust_remote_code=trust_remote_code,
+        )
+
+        model = load_task_model("text-generation", model_name, config)
+        model.train()
+
+        apply_recipe_structure_to_model(model, recipe_file, model_name)
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
 
     if adapters_name:
         logging.info(f"Merging adapter from {adapters_name}.")
