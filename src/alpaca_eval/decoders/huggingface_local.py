@@ -15,6 +15,8 @@ from sparseml.pytorch.model_load.helpers import apply_recipe_structure_to_model
 from sparseml.transformers.sparsification.obcq.export import load_task_model
 import os
 import math
+from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+
 
 from .. import constants, utils
 
@@ -107,6 +109,9 @@ def huggingface_local_completions(
         model.train()
 
         apply_recipe_structure_to_model(model, recipe_file, model_name)
+        model = load_checkpoint_and_dispatch(
+            model, checkpoint=model_name, device_map="auto"
+        )
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
 
