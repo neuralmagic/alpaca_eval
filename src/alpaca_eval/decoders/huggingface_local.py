@@ -102,7 +102,6 @@ def huggingface_local_completions(
     if os.path.exists(recipe_file):
         config = AutoConfig.from_pretrained(
             model_name,
-            trust_remote_code=trust_remote_code,
         )
 
         model = load_task_model("text-generation", model_name, config)
