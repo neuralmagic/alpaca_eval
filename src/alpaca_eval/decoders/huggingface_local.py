@@ -4,7 +4,6 @@ from typing import Optional, Sequence
 import numpy as np
 import torch
 import transformers
-from peft import PeftModel
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
@@ -114,11 +113,6 @@ def huggingface_local_completions(
             )
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
-
-    if adapters_name:
-        logging.info(f"Merging adapter from {adapters_name}.")
-        model = PeftModel.from_pretrained(model, adapters_name)
-        model = model.merge_and_unload()
 
     logging.info(f"Model memory: {model.get_memory_footprint() / 1e9} GB")
 
