@@ -60,6 +60,10 @@ def regex_parser(completion: str, outputs_to_match: dict[Any, Any]) -> list[Any]
         responses.append(key)
         # avoid matching the same output twice
         completion = completion[match.end() :]
+
+    if len(responses) > 1:
+        responses = [responses[0]]
+
     return responses
 
 
