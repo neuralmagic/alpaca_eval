@@ -109,9 +109,10 @@ def huggingface_local_completions(
         model.train()
 
         apply_recipe_structure_to_model(model, recipe_file, model_name)
-        model = load_checkpoint_and_dispatch(
-            model, checkpoint=model_name, device_map="auto"
-        )
+        if model_kwargs["device_map"] == "auto":
+            model = load_checkpoint_and_dispatch(
+                model, checkpoint=model_name, device_map="auto"
+            )
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
 
