@@ -14,7 +14,7 @@ from sparseml.pytorch.model_load.helpers import apply_recipe_structure_to_model
 from sparseml.transformers.sparsification.obcq.export import load_task_model
 import os
 import math
-from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+from accelerate import dispatch_model, infer_auto_device_map
 
 
 from .. import constants, utils
@@ -97,8 +97,13 @@ def huggingface_local_completions(
         **model_kwargs,
     )
 
+    model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
+
     recipe_file = os.path.join(model_name, "recipe.yaml")
     if os.path.exists(recipe_file):
+        device_map = model.hf_device_map
+        del model
+
         config = AutoConfig.from_pretrained(
             model_name,
         )
@@ -108,11 +113,8 @@ def huggingface_local_completions(
 
         apply_recipe_structure_to_model(model, recipe_file, model_name)
         if model_kwargs["device_map"] == "auto":
-            model = load_checkpoint_and_dispatch(
-                model, checkpoint=model_name, device_map="auto"
-            )
-    else:
-        model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
+            model = dispatch_model(model, device_map=device_map)
+        model.eval()
 
     logging.info(f"Model memory: {model.get_memory_footprint() / 1e9} GB")
 
