@@ -8,7 +8,7 @@ from peft import PeftModel
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
-from auto_gptq import AutoGPTQForCausalLM
+from accelerate import init_empty_weights
 
 from .. import constants, utils
 
@@ -92,10 +92,11 @@ def huggingface_local_completions(
 
     config = AutoConfig.from_pretrained(model_name)
     if hasattr(config, "quantization_config"):
-        model = AutoGPTQForCausalLM.from_quantized(
-            model_name,
-            device_map=model_kwargs["device_map"],
-        ).eval()
+        with init_empty_weights():
+            empty_model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16)
+        empty_model.tie_weights()
+        model = load_quantized_model(empty_model, save_folder=model_name, device_map="auto").eval()
+
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
 
