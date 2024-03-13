@@ -8,6 +8,7 @@ from peft import PeftModel
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from auto_gptq import AutoGPTQForCausalLM
 
 from .. import constants, utils
 
