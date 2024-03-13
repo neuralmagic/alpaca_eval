@@ -95,7 +95,6 @@ def huggingface_local_completions(
         model = AutoGPTQForCausalLM.from_quantized(
             model_name,
             device_map=model_kwargs["device_map"],
-            use_marlin=True
         ).eval()
     else:
         model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
