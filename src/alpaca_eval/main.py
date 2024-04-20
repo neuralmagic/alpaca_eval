@@ -196,7 +196,7 @@ def evaluate(
             clearml_task.started()
 
         clearml_task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
-        if name in df_leaderboard:
+        if name in df_leaderboard.columns:
             clearml_task.get_logger().report_single_value(name=name, value=df_leaderboard[name])
         clearml_task.mark_completed()
 
