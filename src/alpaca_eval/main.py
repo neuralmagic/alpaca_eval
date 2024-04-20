@@ -30,8 +30,8 @@ def evaluate(
     sort_by: str = "win_rate",
     is_cache_leaderboard: Optional[bool] = None,
     max_instances: Optional[int] = None,
-    clearml_project=None,
-    clearml_task=None,
+    clearml_project: str = None,
+    clearml_task: str = None,
     annotation_kwargs: Optional[dict[str, Any]] = None,
     Annotator=annotators.PairwiseAnnotator,
     **annotator_kwargs,
@@ -177,6 +177,21 @@ def evaluate(
                 f"path but {type(precomputed_leaderboard)}."
             )
 
+    if clearml_project is not None and clearml_task is not None:
+        from clearml import Task
+        task = Task.get_task(project_name=clearml_project, task_name=clearml_task)
+        if task is None:
+            task = Task.init(project_name=clearml_project, task_name=clearml_task)
+        else:
+            task.started()
+
+        task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
+        if name in df_leaderboard:
+            value = df_leaderboard[name].values[0]
+            if not isinstance(value, str):
+                task.get_logger().report_single_value(name=name, value=value)
+        task.mark_completed()
+
     if is_return_instead_of_print:
         return df_leaderboard, annotations
     else:
@@ -186,19 +201,6 @@ def evaluate(
             current_name=name,
             cols_to_print=["win_rate", "standard_error", "n_total", "avg_length"],  #
         )
-
-    if clearml_project is not None and clearml_task is not None:
-        from clearml import Task
-        clearml_task = Task.get_task(project_name=clearml_project, task_name=clearml_task)
-        if clearml_task is None:
-            clearml_task = Task.init(project_name=clearml_project, task_name=clearml_task)
-        else:
-            clearml_task.started()
-
-        clearml_task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
-        if name in df_leaderboard.columns:
-            clearml_task.get_logger().report_single_value(name=name, value=df_leaderboard[name])
-        clearml_task.mark_completed()
 
 
 def evaluate_from_model(
