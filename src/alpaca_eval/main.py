@@ -30,6 +30,8 @@ def evaluate(
     sort_by: str = "win_rate",
     is_cache_leaderboard: Optional[bool] = None,
     max_instances: Optional[int] = None,
+    clearml_project=None,
+    clearml_task=None,
     annotation_kwargs: Optional[dict[str, Any]] = None,
     Annotator=annotators.PairwiseAnnotator,
     **annotator_kwargs,
@@ -185,6 +187,19 @@ def evaluate(
             cols_to_print=["win_rate", "standard_error", "n_total", "avg_length"],  #
         )
 
+    if clearml_project is not None and clearml_task is not None:
+        from clearml import Task
+        clearml_task = Task.get_task(project_name=clearml_project, task_name=clearml_task)
+        if clearml_task is None:
+            clearml_task = Task.init(project_name=clearml_project, task_name=clearml_task)
+        else:
+            clearml_task.started()
+
+        clearml_task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
+        if name in df_leaderboard:
+            clearml_task.get_logger().report_single_value(name=name, value=df_leaderboard[name])
+        clearml_task.mark_completed()
+
 
 def evaluate_from_model(
     model_configs: Union[AnyPath, dict],
@@ -196,6 +211,8 @@ def evaluate_from_model(
     is_strip_output: bool = True,
     is_load_outputs: bool = True,
     chunksize: int = 64,
+    clearml_project: str = None,
+    clearml_task: str = None,
     **kwargs,
 ):
     """Evaluate a model from HuggingFace or an API provider. This is a wrapper around `evaluate` which includes
@@ -337,6 +354,8 @@ def evaluate_from_model(
         annotators_config=annotators_config,
         output_path=output_path,
         max_instances=max_instances,
+        clearml_project=clearml_project,
+        clearml_task=clearml_task,
         **kwargs,
     )
 
