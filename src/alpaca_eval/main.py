@@ -186,7 +186,7 @@ def evaluate(
             task.started()
 
         task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
-        if name in df_leaderboard:
+        for name in df_leaderboard:
             value = df_leaderboard[name].values[0]
             if not isinstance(value, str):
                 task.get_logger().report_single_value(name=name, value=value)
