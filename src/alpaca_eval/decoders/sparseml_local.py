@@ -86,6 +86,8 @@ def sparseml_local_completions(
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = True
 
     recipe_file = os.path.join(model_name, "recipe.yaml")
+    if not os.path.exists(recipe_file):
+        recipe_file = None
     config = AutoConfig.from_pretrained(model_name)
 
     model = SparseAutoModel.text_generation_from_pretrained(
