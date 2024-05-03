@@ -56,6 +56,16 @@ def get_fn_completions(name: Union[str, Callable]) -> Callable:
             raise e
 
         return huggingface_local_completions
+    
+    elif name == "sparseml_local_completions":
+        try:
+            from .sparseml_local import sparseml_local_completions
+        except ImportError as e:
+            packages = ["accelerate", "nm-transformers"]
+            logging.exception(f"You need {packages} to use sparseml_local_completions. Error:")
+            raise e
+
+        return sparseml_local_completions
 
     elif name == "cohere_completions":
         try:
