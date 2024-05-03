@@ -4,9 +4,10 @@ from typing import Optional, Sequence
 import numpy as np
 import torch
 import transformers
+from peft import PeftModel
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from .. import constants, utils
 
@@ -33,6 +34,7 @@ def huggingface_local_completions(
     cache_dir: Optional[str] = constants.DEFAULT_CACHE_DIR,
     remove_ending: Optional[str] = None,
     is_fast_tokenizer: bool = True,
+    adapters_name: Optional[str] = None,
     **kwargs,
 ) -> dict[str, list]:
     """Decode locally using huggingface transformers pipeline.
@@ -83,27 +85,6 @@ def huggingface_local_completions(
     #  faster but slightly less accurate matrix multiplications
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = True
 
-    recipe_file = os.path.join(model_name, "recipe.yaml")
-    if os.path.exists(recipe_file):
-        config = AutoConfig.from_pretrained(model_name)
-
-        from sparseml.transformers.utils.sparse_model import SparseAutoModel
-        import sparseml.core.session as session_manager
-
-        model = SparseAutoModel.text_generation_from_pretrained(
-            model_name_or_path=model_name,
-            config=config,
-            recipe=recipe_file,
-            trust_remote_code=model_kwargs.get("trust_remote_code", False),
-            torch_dtype=model_kwargs["torch_dtype"],
-        )
-
-        model.eval().to("cuda:0")
-        del model_kwargs["device_map"]
-        kwargs["device"] = 0
-    else:
-        model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
-
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
         cache_dir=cache_dir,
@@ -111,6 +92,7 @@ def huggingface_local_completions(
         use_fast=is_fast_tokenizer,
         **model_kwargs,
     )
+    model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir, **model_kwargs).eval()
 
     if adapters_name:
         logging.info(f"Merging adapter from {adapters_name}.")
@@ -179,11 +161,5 @@ def huggingface_local_completions(
     # local => price is really your compute
     price = [np.nan] * len(completions)
     avg_time = [t.duration / n_examples] * len(completions)
-
-    if os.path.exists(recipe_file):
-        if session_manager.active_session():
-            active_session = session_manager.active_session()
-            active_session.reset()
-    torch.cuda.empty_cache()
 
     return dict(completions=completions, price_per_example=price, time_per_example=avg_time)
