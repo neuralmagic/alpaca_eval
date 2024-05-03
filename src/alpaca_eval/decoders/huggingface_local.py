@@ -8,10 +8,6 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-import os
-from accelerate import dispatch_model, infer_auto_device_map
-
-
 from .. import constants, utils
 
 __all__ = ["huggingface_local_completions"]
@@ -35,6 +31,7 @@ def huggingface_local_completions(
     batch_size: int = 1,
     model_kwargs=None,
     cache_dir: Optional[str] = constants.DEFAULT_CACHE_DIR,
+    remove_ending: Optional[str] = None,
     is_fast_tokenizer: bool = True,
     **kwargs,
 ) -> dict[str, list]:
@@ -60,8 +57,11 @@ def huggingface_local_completions(
     cache_dir : str, optional
         Directory to use for caching the model.
 
+    remove_ending : str, optional
+        The ending string to be removed from completions. Typically eos_token.
+
     kwargs :
-        Additional kwargs to pass to `InferenceApi.__call__`.
+        Additional kwargs to pass to `InferenceClient.__call__`.
     """
     model_kwargs = model_kwargs or {}
     if "device_map" not in model_kwargs:
@@ -112,6 +112,18 @@ def huggingface_local_completions(
         **model_kwargs,
     )
 
+    if adapters_name:
+        logging.info(f"Merging adapter from {adapters_name}.")
+        model = PeftModel.from_pretrained(model, adapters_name)
+        model = model.merge_and_unload()
+
+    if batch_size == 1:
+        try:
+            model = model.to_bettertransformer()
+        except:
+            # could be not implemented or natively supported
+            pass
+
     logging.info(f"Model memory: {model.get_memory_footprint() / 1e9} GB")
 
     if batch_size > 1:
@@ -152,7 +164,10 @@ def huggingface_local_completions(
                 pad_token_id=tokenizer.pad_token_id,
             )
         ):
-            completions.append(out[0]["generated_text"])
+            generated_text = out[0]["generated_text"]
+            if remove_ending is not None and generated_text.endswith(remove_ending):
+                generated_text = generated_text[: -len(remove_ending)]
+            completions.append(generated_text)
 
     logging.info(f"Time for {n_examples} completions: {t}")
 
