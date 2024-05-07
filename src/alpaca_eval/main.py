@@ -379,27 +379,28 @@ def evaluate_from_model(
         else:
             model_outputs = get_completions(model_configs, df=df_chunk)
 
-        if reference_model_configs is None:
-            if "output" not in df_chunk.columns:
-                raise ValueError("evaluation_dataset should have a column 'output' containing references outputs")
-            reference_outputs = df_dataset.copy()
-        else:
-            reference_outputs = get_completions(
-                reference_model_configs,
-                df=df_chunk,
-                old_output_path=output_path / "reference_outputs.json",
-            )
+        if is_main_process:
+            if reference_model_configs is None:
+                if "output" not in df_chunk.columns:
+                    raise ValueError("evaluation_dataset should have a column 'output' containing references outputs")
+                reference_outputs = df_dataset.copy()
+            else:
+                reference_outputs = get_completions(
+                    reference_model_configs,
+                    df=df_chunk,
+                    old_output_path=output_path / "reference_outputs.json",
+                )
 
-        if output_path is not None and is_main_process:
-            model_outputs.to_json(output_path / "model_outputs.json", orient="records", indent=2)
-            reference_outputs.to_json(output_path / "reference_outputs.json", orient="records", indent=2)
-
-    if reference_model_configs is None:
-        # using a default reference outputs => uses the right leaderboard
-        if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
-            reference_outputs = evaluation_dataset
+            if output_path is not None:
+                model_outputs.to_json(output_path / "model_outputs.json", orient="records", indent=2)
+                reference_outputs.to_json(output_path / "reference_outputs.json", orient="records", indent=2)
 
     if is_main_process:
+        if reference_model_configs is None:
+            # using a default reference outputs => uses the right leaderboard
+            if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
+                reference_outputs = evaluation_dataset
+
         return evaluate(
             model_outputs=model_outputs,
             reference_outputs=reference_outputs,

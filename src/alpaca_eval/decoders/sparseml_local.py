@@ -34,18 +34,17 @@ def do_generations(pipeline, prompts, remove_ending):
     prompts_dataset = ListDataset(prompts)
     completions = []
 
-    with utils.Timer() as t:
-        for out in tqdm(
-            pipeline(
-                prompts_dataset,
-                return_full_text=False,
-                pad_token_id=tokenizer.pad_token_id,
-            )
-        ):
-            generated_text = out[0]["generated_text"]
-            if remove_ending is not None and generated_text.endswith(remove_ending):
-                generated_text = generated_text[: -len(remove_ending)]
-            completions.append(generated_text)
+    for out in tqdm(
+        pipeline(
+            prompts_dataset,
+            return_full_text=False,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+    ):
+        generated_text = out[0]["generated_text"]
+        if remove_ending is not None and generated_text.endswith(remove_ending):
+            generated_text = generated_text[: -len(remove_ending)]
+        completions.append(generated_text)
 
     return completions
 
@@ -101,7 +100,7 @@ def sparseml_local_completions(
         is_main_process = distributed_state.is_main_process
     else:
         is_main_process = True
-        
+
     if "device_map" not in model_kwargs and world_size == 1:
         model_kwargs["device_map"] = "auto"
     if "torch_dtype" in model_kwargs and isinstance(model_kwargs["torch_dtype"], str):
@@ -178,11 +177,16 @@ def sparseml_local_completions(
     ## compute and log the time for completions
     if world_size > 1:
         with distributed_state.split_between_processes(prompts, apply_padding=True) as local_prompts:
-            local_completions = do_generations(pipeline, local_prompts, remove_ending)
+            if is_main_process:
+                with utils.Timer() as t:
+                    local_completions = do_generations(pipeline, local_prompts, remove_ending)
+            else:
+                local_completions = do_generations(pipeline, local_prompts, remove_ending)
             completions = gather_object(local_completions)
             completions = completions[:len(prompts)]
     else:
-        completions = do_generations(pipeline, prompts, remove_ending)
+        with utils.Timer() as t:
+            completions = do_generations(pipeline, prompts, remove_ending)
 
     if is_main_process:
         logging.info(f"Time for {n_examples} completions: {t}")
@@ -192,14 +196,14 @@ def sparseml_local_completions(
         completions, _ = zip(*sorted(list(zip(completions, original_order)), key=lambda x: x[1]))
         completions = list(completions)
 
-    # local => price is really your compute
-    price = [np.nan] * len(completions)
-    avg_time = [t.duration / n_examples] * len(completions)
-
     if os.path.exists(recipe_file):
         if session_manager.active_session():
             active_session = session_manager.active_session()
             active_session.reset()
     torch.cuda.empty_cache()
 
-    return dict(completions=completions, price_per_example=price, time_per_example=avg_time)
+    # local => price is really your compute
+    if is_main_process:
+        price = [np.nan] * len(completions)
+        avg_time = [t.duration / n_examples] * len(completions)
+        return dict(completions=completions, price_per_example=price, time_per_example=avg_time)
