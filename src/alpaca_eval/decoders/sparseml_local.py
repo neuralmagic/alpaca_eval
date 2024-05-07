@@ -34,17 +34,28 @@ def do_generations(pipeline, tokenizer, prompts, remove_ending, progress=False):
     prompts_dataset = ListDataset(prompts)
     completions = []
 
-    for out in tqdm(
-        pipeline(
+    if progress:
+        for out in tqdm(
+            pipeline(
+                prompts_dataset,
+                return_full_text=False,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+        ):
+            generated_text = out[0]["generated_text"]
+            if remove_ending is not None and generated_text.endswith(remove_ending):
+                generated_text = generated_text[: -len(remove_ending)]
+            completions.append(generated_text)
+    else:
+        for out in pipeline(
             prompts_dataset,
             return_full_text=False,
             pad_token_id=tokenizer.pad_token_id,
-        )
-    ):
-        generated_text = out[0]["generated_text"]
-        if remove_ending is not None and generated_text.endswith(remove_ending):
-            generated_text = generated_text[: -len(remove_ending)]
-        completions.append(generated_text)
+        ):
+            generated_text = out[0]["generated_text"]
+            if remove_ending is not None and generated_text.endswith(remove_ending):
+                generated_text = generated_text[: -len(remove_ending)]
+            completions.append(generated_text)
 
     return completions
 
@@ -178,14 +189,14 @@ def sparseml_local_completions(
         with distributed_state.split_between_processes(prompts, apply_padding=True) as local_prompts:
             if is_main_process:
                 with utils.Timer() as t:
-                    local_completions = do_generations(pipeline, tokenizer, local_prompts, remove_ending)
+                    local_completions = do_generations(pipeline, tokenizer, local_prompts, remove_ending, True)
             else:
                 local_completions = do_generations(pipeline, tokenizer, local_prompts, remove_ending)
             completions = gather_object(local_completions)
             completions = completions[:len(prompts)]
     else:
         with utils.Timer() as t:
-            completions = do_generations(pipeline, prompts, remove_ending)
+            completions = do_generations(pipeline, tokenizer, prompts, remove_ending, True)
 
     if is_main_process:
         logging.info(f"Time for {n_examples} completions: {t}")
