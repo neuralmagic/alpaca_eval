@@ -130,8 +130,7 @@ def sparseml_local_completions(
         model_name_or_path=model_name,
         config=config,
         recipe=recipe_file,
-        trust_remote_code=model_kwargs.get("trust_remote_code", False),
-        torch_dtype=model_kwargs["torch_dtype"],
+        **model_kwargs,
     )
 
     model.eval()
