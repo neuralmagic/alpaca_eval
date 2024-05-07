@@ -30,7 +30,7 @@ class ListDataset(Dataset):
         return self.original_list[i]
 
 
-def do_generations(pipeline, prompts, remove_ending):
+def do_generations(pipeline, tokenizer, prompts, remove_ending):
     prompts_dataset = ListDataset(prompts)
     completions = []
 
@@ -179,9 +179,9 @@ def sparseml_local_completions(
         with distributed_state.split_between_processes(prompts, apply_padding=True) as local_prompts:
             if is_main_process:
                 with utils.Timer() as t:
-                    local_completions = do_generations(pipeline, local_prompts, remove_ending)
+                    local_completions = do_generations(pipeline, tokenizer, local_prompts, remove_ending)
             else:
-                local_completions = do_generations(pipeline, local_prompts, remove_ending)
+                local_completions = do_generations(pipeline, tokenizer, local_prompts, remove_ending)
             completions = gather_object(local_completions)
             completions = completions[:len(prompts)]
     else:
