@@ -296,6 +296,14 @@ def evaluate_from_model(
     kwargs:
         Other kwargs to `evaluate`
     """
+
+    if torch.cuda.device_count() > 1:
+        from accelerate import Accelerator
+        accelerator = Accelerator()
+        is_main_process = Accelerator.is_main_process
+    else:
+        is_main_process = True
+
     df_dataset = utils.load_or_convert_to_dataframe(evaluation_dataset)
 
     if chunksize is not None and not is_load_outputs:
@@ -375,7 +383,7 @@ def evaluate_from_model(
                 old_output_path=output_path / "reference_outputs.json",
             )
 
-        if output_path is not None:
+        if output_path is not None and is_main_process:
             model_outputs.to_json(output_path / "model_outputs.json", orient="records", indent=2)
             reference_outputs.to_json(output_path / "reference_outputs.json", orient="records", indent=2)
 
@@ -384,16 +392,17 @@ def evaluate_from_model(
         if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
             reference_outputs = evaluation_dataset
 
-    return evaluate(
-        model_outputs=model_outputs,
-        reference_outputs=reference_outputs,
-        annotators_config=annotators_config,
-        output_path=output_path,
-        max_instances=max_instances,
-        clearml_project=clearml_project,
-        clearml_task=clearml_task,
-        **kwargs,
-    )
+    if is_main_process:
+        return evaluate(
+            model_outputs=model_outputs,
+            reference_outputs=reference_outputs,
+            annotators_config=annotators_config,
+            output_path=output_path,
+            max_instances=max_instances,
+            clearml_project=clearml_project,
+            clearml_task=clearml_task,
+            **kwargs,
+        )
 
 
 def make_leaderboard(

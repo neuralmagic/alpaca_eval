@@ -11,6 +11,9 @@ from transformers import AutoTokenizer, AutoConfig
 from sparseml.transformers.utils.sparse_model import SparseAutoModel
 import sparseml.core.session as session_manager
 
+from accelerate import PartialState
+from accelerate.utils import gather_object
+
 from .. import constants, utils
 
 __all__ = ["sparseml_local_completions"]
@@ -25,6 +28,26 @@ class ListDataset(Dataset):
 
     def __getitem__(self, i):
         return self.original_list[i]
+
+
+def do_generations(pipeline, prompts, remove_ending):
+    prompts_dataset = ListDataset(prompts)
+    completions = []
+
+    with utils.Timer() as t:
+        for out in tqdm(
+            pipeline(
+                prompts_dataset,
+                return_full_text=False,
+                pad_token_id=tokenizer.pad_token_id,
+            )
+        ):
+            generated_text = out[0]["generated_text"]
+            if remove_ending is not None and generated_text.endswith(remove_ending):
+                generated_text = generated_text[: -len(remove_ending)]
+            completions.append(generated_text)
+
+    return completions
 
 
 def sparseml_local_completions(
@@ -66,8 +89,15 @@ def sparseml_local_completions(
     kwargs :
         Additional kwargs to pass to `InferenceClient.__call__`.
     """
+
+    # Start up the distributed environment without needing the Accelerator.
+    if torch.cuda.device_count() > 1:
+        distributed_state = PartialState()
+    else:
+        distributed_state = None
+    
     model_kwargs = model_kwargs or {}
-    if "device_map" not in model_kwargs:
+    if "device_map" not in model_kwargs and distributed_state is None:
         model_kwargs["device_map"] = "auto"
     if "torch_dtype" in model_kwargs and isinstance(model_kwargs["torch_dtype"], str):
         model_kwargs["torch_dtype"] = getattr(torch, model_kwargs["torch_dtype"])
@@ -98,9 +128,7 @@ def sparseml_local_completions(
         torch_dtype=model_kwargs["torch_dtype"],
     )
 
-    model.eval().to("cuda:0")
-    del model_kwargs["device_map"]
-    kwargs["device"] = 0
+    model.eval()
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
@@ -139,21 +167,14 @@ def sparseml_local_completions(
     )
 
     ## compute and log the time for completions
-    prompts_dataset = ListDataset(prompts)
-    completions = []
-
-    with utils.Timer() as t:
-        for out in tqdm(
-            pipeline(
-                prompts_dataset,
-                return_full_text=False,
-                pad_token_id=tokenizer.pad_token_id,
-            )
-        ):
-            generated_text = out[0]["generated_text"]
-            if remove_ending is not None and generated_text.endswith(remove_ending):
-                generated_text = generated_text[: -len(remove_ending)]
-            completions.append(generated_text)
+    if distributed_state is not None:
+        with distributed_state.split_between_processes(prompts, apply_padding=True) as local_prompts:
+            pipeline.to(distributed_state.device)
+            local_completions = do_generations(pipeline, local_prompts, remove_ending)
+            completions = gather_object(local_completions)
+            completions = completions[:len(prompts)]
+    else:
+        completions = do_generations(pipeline, prompts, remove_ending)
 
     logging.info(f"Time for {n_examples} completions: {t}")
 
