@@ -30,7 +30,7 @@ class ListDataset(Dataset):
         return self.original_list[i]
 
 
-def do_generations(pipeline, tokenizer, prompts, remove_ending):
+def do_generations(pipeline, tokenizer, prompts, remove_ending, progress=False):
     prompts_dataset = ListDataset(prompts)
     completions = []
 

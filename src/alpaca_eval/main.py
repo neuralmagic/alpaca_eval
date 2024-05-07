@@ -303,7 +303,7 @@ def evaluate_from_model(
     if world_size > 1:
         from accelerate import Accelerator
         accelerator = Accelerator()
-        is_main_process = Accelerator.is_main_process
+        is_main_process = accelerator.is_main_process
     else:
         is_main_process = True
 
