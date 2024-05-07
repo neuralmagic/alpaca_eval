@@ -5,6 +5,7 @@ from typing import Any, Callable, Literal, Optional, Sequence, Union
 
 import fire
 import pandas as pd
+import os
 
 from . import analyze, annotators, constants, decoders, metrics, utils
 from .types import AnyData, AnyLoadableDF, AnyPath
@@ -297,7 +298,9 @@ def evaluate_from_model(
         Other kwargs to `evaluate`
     """
 
-    if torch.cuda.device_count() > 1:
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+    if world_size > 1:
         from accelerate import Accelerator
         accelerator = Accelerator()
         is_main_process = Accelerator.is_main_process

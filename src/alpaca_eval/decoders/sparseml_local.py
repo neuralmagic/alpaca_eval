@@ -91,13 +91,14 @@ def sparseml_local_completions(
     """
 
     # Start up the distributed environment without needing the Accelerator.
-    if torch.cuda.device_count() > 1:
-        distributed_state = PartialState()
-    else:
-        distributed_state = None
-    
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
     model_kwargs = model_kwargs or {}
-    if "device_map" not in model_kwargs and distributed_state is None:
+
+    if world_size > 1:
+        distributed_state = PartialState()
+        model_kwargs["device_map"] = distributed_state.device
+    if "device_map" not in model_kwargs and world_size == 1:
         model_kwargs["device_map"] = "auto"
     if "torch_dtype" in model_kwargs and isinstance(model_kwargs["torch_dtype"], str):
         model_kwargs["torch_dtype"] = getattr(torch, model_kwargs["torch_dtype"])
@@ -167,9 +168,8 @@ def sparseml_local_completions(
     )
 
     ## compute and log the time for completions
-    if distributed_state is not None:
+    if world_size > 1:
         with distributed_state.split_between_processes(prompts, apply_padding=True) as local_prompts:
-            pipeline.to(distributed_state.device)
             local_completions = do_generations(pipeline, local_prompts, remove_ending)
             completions = gather_object(local_completions)
             completions = completions[:len(prompts)]
