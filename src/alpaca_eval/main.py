@@ -310,11 +310,13 @@ def evaluate_from_model(
     df_dataset = utils.load_or_convert_to_dataframe(evaluation_dataset)
 
     if chunksize is not None and not is_load_outputs:
-        logging.info("`is_load_outputs` has to be true to use chunksize. Setting it to True.")
+        if is_main_process:
+            logging.info("`is_load_outputs` has to be true to use chunksize. Setting it to True.")
         is_load_outputs = True
 
     if chunksize is not None and max_instances is not None:
-        logging.info("cannot use `chunksize` with max_instances. Setting `chunksize` to None.")
+        if is_main_process:
+            logging.info("cannot use `chunksize` with max_instances. Setting `chunksize` to None.")
         chunksize = None
 
     model_configs = utils.load_configs(model_configs, relative_to=constants.MODELS_CONFIG_DIR)
@@ -337,13 +339,15 @@ def evaluate_from_model(
         configs = list(configs.values())[0]
 
         if is_loading_old_outputs:
-            logging.info(f"Loading outputs from {old_output_path}")
+            if is_main_process:
+                logging.info(f"Loading outputs from {old_output_path}")
             old_outputs = utils.load_or_convert_to_dataframe(old_output_path)
             # select only rows in curr_outputs that have "instruction" that are not in old_outputs
             idx_found_old_outputs = curr_outputs["instruction"].isin(old_outputs["instruction"])
             curr_outputs = curr_outputs[~idx_found_old_outputs]
             assert (old_outputs["generator"] == generator).all()
-            logging.info(f"Found {len(old_outputs)}. Only generating {len(curr_outputs)} .")
+            if is_main_process:
+                logging.info(f"Found {len(old_outputs)}. Only generating {len(curr_outputs)} .")
 
         if max_instances is not None:
             curr_outputs = curr_outputs.iloc[:max_instances]

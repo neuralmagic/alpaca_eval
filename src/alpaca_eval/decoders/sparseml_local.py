@@ -98,6 +98,10 @@ def sparseml_local_completions(
     if world_size > 1:
         distributed_state = PartialState()
         model_kwargs["device_map"] = distributed_state.device
+        is_main_process = distributed_state.is_main_process
+    else:
+        is_main_process = True
+        
     if "device_map" not in model_kwargs and world_size == 1:
         model_kwargs["device_map"] = "auto"
     if "torch_dtype" in model_kwargs and isinstance(model_kwargs["torch_dtype"], str):
@@ -105,10 +109,12 @@ def sparseml_local_completions(
 
     n_examples = len(prompts)
     if n_examples == 0:
-        logging.info("No samples to annotate.")
+        if is_main_process:
+            logging.info("No samples to annotate.")
         return []
     else:
-        logging.info(f"Using `huggingface_local_completions` on {n_examples} prompts using {model_name}.")
+        if is_main_process:
+            logging.info(f"Using `huggingface_local_completions` on {n_examples} prompts using {model_name}.")
 
     if not torch.cuda.is_available():
         model_kwargs["torch_dtype"] = None
@@ -139,7 +145,8 @@ def sparseml_local_completions(
         **model_kwargs,
     )
 
-    logging.info(f"Model memory: {model.get_memory_footprint() / 1e9} GB")
+    if is_main_process:
+        logging.info(f"Model memory: {model.get_memory_footprint() / 1e9} GB")
 
     if batch_size > 1:
         # sort the prompts by length so that we don't necessarily pad them by too much
@@ -158,7 +165,8 @@ def sparseml_local_completions(
         batch_size=batch_size,
     )
     default_kwargs.update(kwargs)
-    logging.info(f"Kwargs to completion: {default_kwargs}")
+    if is_main_process:
+        logging.info(f"Kwargs to completion: {default_kwargs}")
     pipeline = transformers.pipeline(
         task="text-generation",
         model=model,
@@ -176,7 +184,8 @@ def sparseml_local_completions(
     else:
         completions = do_generations(pipeline, prompts, remove_ending)
 
-    logging.info(f"Time for {n_examples} completions: {t}")
+    if is_main_process:
+        logging.info(f"Time for {n_examples} completions: {t}")
 
     if batch_size > 1:
         # reorder the completions to match the original order
