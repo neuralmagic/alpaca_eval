@@ -1,0 +1,11 @@
+llama-2-13b-chat-hf:
+  prompt_template: "llama-2-13b-chat-hf/prompt.txt"
+  fn_completions: "huggingface_local_completions"
+  completions_kwargs:
+    model_name: "meta-llama/Llama-2-13b-chat-hf"
+    max_new_tokens: 50
+    temperature: 0
+  completion_parser_kwargs:
+    outputs_to_match:
+      1: '(?i)output \(a\)'
+      2: '(?i)output \(b\)'

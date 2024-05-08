@@ -1,0 +1,2 @@
+,np.tanh(std_delta_len),instruction_difficulty,not_gamed_baseline.astype(float)
+llama2_7B_45B_sparse50_LR2e-4_GC2_E2_70_LR2e-4_E2_GC2_Tdense_LR1e-4_E1,-1.6103322725791671,0.4432198947543228,1.1542486422736717

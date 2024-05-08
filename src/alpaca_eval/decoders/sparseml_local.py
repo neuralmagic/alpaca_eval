@@ -124,7 +124,7 @@ def sparseml_local_completions(
         return []
     else:
         if is_main_process:
-            logging.info(f"Using `huggingface_local_completions` on {n_examples} prompts using {model_name}.")
+            logging.info(f"Using `sparseml_local_completions` on {n_examples} prompts using {model_name}.")
 
     if not torch.cuda.is_available():
         model_kwargs["torch_dtype"] = None
@@ -206,7 +206,7 @@ def sparseml_local_completions(
         completions, _ = zip(*sorted(list(zip(completions, original_order)), key=lambda x: x[1]))
         completions = list(completions)
 
-    if os.path.exists(recipe_file):
+    if recipe_file is not None and os.path.exists(recipe_file):
         if session_manager.active_session():
             active_session = session_manager.active_session()
             active_session.reset()
@@ -217,3 +217,6 @@ def sparseml_local_completions(
         price = [np.nan] * len(completions)
         avg_time = [t.duration / n_examples] * len(completions)
         return dict(completions=completions, price_per_example=price, time_per_example=avg_time)
+    else:
+        return dict(completions=completions)
+    

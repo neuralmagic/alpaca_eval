@@ -395,6 +395,9 @@ def evaluate_from_model(
                 model_outputs.to_json(output_path / "model_outputs.json", orient="records", indent=2)
                 reference_outputs.to_json(output_path / "reference_outputs.json", orient="records", indent=2)
 
+        if world_size > 1:
+            accelerator.wait_for_everyone()
+
     if is_main_process:
         if reference_model_configs is None:
             # using a default reference outputs => uses the right leaderboard
