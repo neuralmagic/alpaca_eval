@@ -5,6 +5,7 @@ from typing import Any, Callable, Literal, Optional, Sequence, Union
 
 import fire
 import pandas as pd
+import os
 
 from . import analyze, annotators, constants, decoders, metrics, utils
 from .types import AnyData, AnyLoadableDF, AnyPath
@@ -31,6 +32,8 @@ def evaluate(
     sort_by: str = "length_controlled_winrate" if constants.IS_ALPACA_EVAL_2 else "win_rate",
     is_cache_leaderboard: Optional[bool] = None,
     max_instances: Optional[int] = None,
+    clearml_project: str = None,
+    clearml_task: str = None,
     annotation_kwargs: Optional[dict[str, Any]] = None,
     Annotator=annotators.PairwiseAnnotator,
     **annotator_kwargs,
@@ -209,6 +212,21 @@ def evaluate(
                 f"path but {type(precomputed_leaderboard)}."
             )
 
+    if clearml_project is not None and clearml_task is not None:
+        from clearml import Task
+        task = Task.get_task(project_name=clearml_project, task_name=clearml_task)
+        if task is None:
+            task = Task.init(project_name=clearml_project, task_name=clearml_task)
+        else:
+            task.started()
+
+        task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
+        for name in df_leaderboard:
+            value = df_leaderboard[name].values[0]
+            if not isinstance(value, str):
+                task.get_logger().report_single_value(name=name, value=value)
+        task.mark_completed()
+
     if is_return_instead_of_print:
         return df_leaderboard, annotations
     else:
@@ -230,6 +248,8 @@ def evaluate_from_model(
     is_strip_output: bool = True,
     is_load_outputs: bool = True,
     chunksize: int = 64,
+    clearml_project: str = None,
+    clearml_task: str = None,
     **kwargs,
 ):
     """Evaluate a model from HuggingFace or an API provider. This is a wrapper around `evaluate` which includes
@@ -277,14 +297,26 @@ def evaluate_from_model(
     kwargs:
         Other kwargs to `evaluate`
     """
+
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+    if world_size > 1:
+        from accelerate import Accelerator
+        accelerator = Accelerator()
+        is_main_process = accelerator.is_main_process
+    else:
+        is_main_process = True
+
     df_dataset = utils.load_or_convert_to_dataframe(evaluation_dataset)
 
     if chunksize is not None and not is_load_outputs:
-        logging.info("`is_load_outputs` has to be true to use chunksize. Setting it to True.")
+        if is_main_process:
+            logging.info("`is_load_outputs` has to be true to use chunksize. Setting it to True.")
         is_load_outputs = True
 
     if chunksize is not None and max_instances is not None:
-        logging.info("cannot use `chunksize` with max_instances. Setting `chunksize` to None.")
+        if is_main_process:
+            logging.info("cannot use `chunksize` with max_instances. Setting `chunksize` to None.")
         chunksize = None
 
     model_configs = utils.load_configs(model_configs, relative_to=constants.MODELS_CONFIG_DIR)
@@ -307,13 +339,15 @@ def evaluate_from_model(
         configs = list(configs.values())[0]
 
         if is_loading_old_outputs:
-            logging.info(f"Loading outputs from {old_output_path}")
+            if is_main_process:
+                logging.info(f"Loading outputs from {old_output_path}")
             old_outputs = utils.load_or_convert_to_dataframe(old_output_path)
             # select only rows in curr_outputs that have "instruction" that are not in old_outputs
             idx_found_old_outputs = curr_outputs["instruction"].isin(old_outputs["instruction"])
             curr_outputs = curr_outputs[~idx_found_old_outputs]
             assert (old_outputs["generator"] == generator).all()
-            logging.info(f"Found {len(old_outputs)}. Only generating {len(curr_outputs)} .")
+            if is_main_process:
+                logging.info(f"Found {len(old_outputs)}. Only generating {len(curr_outputs)} .")
 
         if max_instances is not None:
             curr_outputs = curr_outputs.iloc[:max_instances]
@@ -345,34 +379,41 @@ def evaluate_from_model(
         else:
             model_outputs = get_completions(model_configs, df=df_chunk)
 
+        if is_main_process:
+            if reference_model_configs is None:
+                if "output" not in df_chunk.columns:
+                    raise ValueError("evaluation_dataset should have a column 'output' containing references outputs")
+                reference_outputs = df_dataset.copy()
+            else:
+                reference_outputs = get_completions(
+                    reference_model_configs,
+                    df=df_chunk,
+                    old_output_path=output_path / "reference_outputs.json",
+                )
+
+            if output_path is not None:
+                model_outputs.to_json(output_path / "model_outputs.json", orient="records", indent=2)
+                reference_outputs.to_json(output_path / "reference_outputs.json", orient="records", indent=2)
+
+        if world_size > 1:
+            accelerator.wait_for_everyone()
+
+    if is_main_process:
         if reference_model_configs is None:
-            if "output" not in df_chunk.columns:
-                raise ValueError("evaluation_dataset should have a column 'output' containing references outputs")
-            reference_outputs = df_dataset.copy()
-        else:
-            reference_outputs = get_completions(
-                reference_model_configs,
-                df=df_chunk,
-                old_output_path=output_path / "reference_outputs.json",
-            )
+            # using a default reference outputs => uses the right leaderboard
+            if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
+                reference_outputs = evaluation_dataset
 
-        if output_path is not None:
-            model_outputs.to_json(output_path / "model_outputs.json", orient="records", indent=2)
-            reference_outputs.to_json(output_path / "reference_outputs.json", orient="records", indent=2)
-
-    if reference_model_configs is None:
-        # using a default reference outputs => uses the right leaderboard
-        if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
-            reference_outputs = evaluation_dataset
-
-    return evaluate(
-        model_outputs=model_outputs,
-        reference_outputs=reference_outputs,
-        annotators_config=annotators_config,
-        output_path=output_path,
-        max_instances=max_instances,
-        **kwargs,
-    )
+        return evaluate(
+            model_outputs=model_outputs,
+            reference_outputs=reference_outputs,
+            annotators_config=annotators_config,
+            output_path=output_path,
+            max_instances=max_instances,
+            clearml_project=clearml_project,
+            clearml_task=clearml_task,
+            **kwargs,
+        )
 
 
 def make_leaderboard(
