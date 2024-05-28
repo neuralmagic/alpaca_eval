@@ -12,7 +12,7 @@ from .types import AnyData, AnyLoadableDF, AnyPath
 
 CUR_DIR = Path(__file__).parent
 
-__all__ = ["evaluate", "evaluate_from_model", "analyze_evaluators", "make_leaderboard"]
+__all__ = ["evaluate", "evaluate_from_model", "analyze_evaluators", "make_leaderboard", "generate"]
 
 
 def evaluate(
@@ -238,19 +238,15 @@ def evaluate(
         )
 
 
-def evaluate_from_model(
+def generate(
     model_configs: Union[AnyPath, dict],
     reference_model_configs: Optional[Union[AnyPath, dict]] = None,
     evaluation_dataset: AnyLoadableDF = constants.ALPACAEVAL_REFERENCE_OUTPUTS,
-    annotators_config: AnyPath = constants.DEFAULT_ANNOTATOR_CONFIG,
     output_path: AnyPath = "auto",
     max_instances: int = None,
     is_strip_output: bool = True,
     is_load_outputs: bool = True,
     chunksize: int = 64,
-    clearml_project: str = None,
-    clearml_task: str = None,
-    **kwargs,
 ):
     """Evaluate a model from HuggingFace or an API provider. This is a wrapper around `evaluate` which includes
     generating from
@@ -275,9 +271,6 @@ def evaluate_from_model(
     evaluation_dataset : path or callable, optional
         Path to the evaluation dataset or a function that returns a dataframe. If None, we use the default evaluation
 
-    annotators_config : path or dict, optional
-        Path to the annotators configuration or a dictionary. If None, we use the default annotators configuration.
-
     output_path : path, optional
         Path to save the generations, annotations and leaderboard. If auto saves at `results/<model_name>`
 
@@ -293,9 +286,6 @@ def evaluate_from_model(
 
     chunksize : int, optional
         Number of instances to generate before saving. If None, we save after all generations.
-
-    kwargs:
-        Other kwargs to `evaluate`
     """
 
     world_size = int(os.environ.get("WORLD_SIZE", 1))
@@ -397,23 +387,96 @@ def evaluate_from_model(
 
         if world_size > 1:
             accelerator.wait_for_everyone()
+    
+    return model_outputs, reference_outputs
 
-    if is_main_process:
-        if reference_model_configs is None:
-            # using a default reference outputs => uses the right leaderboard
-            if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
-                reference_outputs = evaluation_dataset
 
-        return evaluate(
-            model_outputs=model_outputs,
-            reference_outputs=reference_outputs,
-            annotators_config=annotators_config,
-            output_path=output_path,
-            max_instances=max_instances,
-            clearml_project=clearml_project,
-            clearml_task=clearml_task,
-            **kwargs,
-        )
+def evaluate_from_model(
+    model_configs: Union[AnyPath, dict],
+    reference_model_configs: Optional[Union[AnyPath, dict]] = None,
+    evaluation_dataset: AnyLoadableDF = constants.ALPACAEVAL_REFERENCE_OUTPUTS,
+    annotators_config: AnyPath = constants.DEFAULT_ANNOTATOR_CONFIG,
+    output_path: AnyPath = "auto",
+    max_instances: int = None,
+    is_strip_output: bool = True,
+    is_load_outputs: bool = True,
+    chunksize: int = 64,
+    clearml_project: str = None,
+    clearml_task: str = None,
+    **kwargs,
+):
+    """Evaluate a model from HuggingFace or an API provider. This is a wrapper around `evaluate` which includes
+    generating from
+    a desired model.
+
+    Parameters
+    ----------
+    model_configs : path or dict
+        A dictionary or path (relative to `models_configs`) to a yaml file containing the configuration of the model to
+        decode from. If a directory,we search for 'configs.yaml' in it. The keys in the first dictionary should be the
+        generator's name, and the value should be a dictionary of the generator's configuration which should have the
+        following keys:
+        - prompt_template (str): a prompt template or path to one. Each template should contain placeholders for
+        keys in the data dictionary, typically {instruction} and {output}.
+        - fn_completions (str): function in `alpaca_farm.decoders` for completions. Needs to accept as first argument
+            `prompts` which is a list of string.
+        - completions_kwargs (dict): kwargs for fn_completions. E.g. model_name, max_tokens, temperature...
+
+    reference_model_configs : path or dict, optional
+        Same as in `model_configs` but for the reference model. If None, we use the default Davinci003 outputs.
+
+    evaluation_dataset : path or callable, optional
+        Path to the evaluation dataset or a function that returns a dataframe. If None, we use the default evaluation
+
+    annotators_config : path or dict, optional
+        Path to the annotators configuration or a dictionary. If None, we use the default annotators configuration.
+
+    output_path : path, optional
+        Path to save the generations, annotations and leaderboard. If auto saves at `results/<model_name>`
+
+    max_instances : int, optional
+        Maximum number of instances to generate and evaluate. If None, we evaluate all instances.
+
+    is_strip_output : bool, optional
+        Whether to strip trailing and leading whitespaces from the outputs.
+
+    is_load_outputs : bool, optional
+        Whether to try to load outputs from the output path. If True and outputs exist we only generate outputs for
+        instructions that don't have outputs yet.
+
+    chunksize : int, optional
+        Number of instances to generate before saving. If None, we save after all generations.
+
+    kwargs:
+        Other kwargs to `evaluate`
+    """
+
+    model_outputs, reference_outputs = generate(
+        model_configs,
+        reference_model_configs,
+        evaluation_dataset,
+        output_path,
+        max_instances,
+        is_strip_output,
+        is_load_outputs,
+        chunksize,
+    )
+
+    if reference_model_configs is None:
+        # using a default reference outputs => uses the right leaderboard
+        if evaluation_dataset in [constants.ALPACAEVAL_REFERENCE_OUTPUTS]:
+            reference_outputs = evaluation_dataset
+
+    return evaluate(
+        model_outputs=model_outputs,
+        reference_outputs=reference_outputs,
+        annotators_config=annotators_config,
+        output_path=output_path,
+        max_instances=max_instances,
+        clearml_project=clearml_project,
+        clearml_task=clearml_task,
+        **kwargs,
+    )
 
 
 def make_leaderboard(
