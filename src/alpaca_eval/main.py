@@ -388,7 +388,8 @@ def generate(
         if world_size > 1:
             accelerator.wait_for_everyone()
     
-    return model_outputs, reference_outputs
+    if is_main_process:
+        return model_outputs, reference_outputs, output_path
 
 
 def evaluate_from_model(
@@ -451,7 +452,7 @@ def evaluate_from_model(
         Other kwargs to `evaluate`
     """
 
-    model_outputs, reference_outputs = generate(
+    model_outputs, reference_outputs, output_path = generate(
         model_configs,
         reference_model_configs,
         evaluation_dataset,
@@ -700,6 +701,7 @@ ALL_FUNCTIONS = {
     "evaluate_from_model": evaluate_from_model,
     "make_leaderboard": make_leaderboard,
     "analyze_evaluators": analyze_evaluators,
+    "generate": generate,
 }
 
 
