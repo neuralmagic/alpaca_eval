@@ -32,8 +32,6 @@ def evaluate(
     sort_by: str = "length_controlled_winrate" if constants.IS_ALPACA_EVAL_2 else "win_rate",
     is_cache_leaderboard: Optional[bool] = None,
     max_instances: Optional[int] = None,
-    clearml_project: str = None,
-    clearml_task: str = None,
     annotation_kwargs: Optional[dict[str, Any]] = None,
     Annotator=annotators.PairwiseAnnotator,
     **annotator_kwargs,
@@ -212,21 +210,6 @@ def evaluate(
                 f"path but {type(precomputed_leaderboard)}."
             )
 
-    if clearml_project is not None and clearml_task is not None:
-        from clearml import Task
-        task = Task.get_task(project_name=clearml_project, task_name=clearml_task)
-        if task is None:
-            task = Task.init(project_name=clearml_project, task_name=clearml_task)
-        else:
-            task.started()
-
-        task.upload_artifact(name='alpaca-eval output', artifact_object=df_leaderboard)
-        for name in df_leaderboard:
-            value = df_leaderboard[name].values[0]
-            if not isinstance(value, str):
-                task.get_logger().report_single_value(name=name, value=value)
-        task.mark_completed()
-
     if is_return_instead_of_print:
         return df_leaderboard, annotations
     else:
@@ -309,9 +292,10 @@ def generate(
             logging.info("cannot use `chunksize` with max_instances. Setting `chunksize` to None.")
         chunksize = None
 
-    model_configs = utils.load_configs(model_configs, relative_to=constants.MODELS_CONFIG_DIR)
+    base_dir = Path(kwargs.get("base_dir", constants.MODELS_CONFIG_DIR))
+    model_configs = utils.load_configs(model_configs, relative_to=base_dir)
     if reference_model_configs is not None:
-        reference_model_configs = utils.load_configs(reference_model_configs, relative_to=constants.MODELS_CONFIG_DIR)
+        reference_model_configs = utils.load_configs(reference_model_configs, relative_to=base_dir)
 
     if output_path == "auto":
         output_path = Path("results") / list(model_configs.keys())[0]
@@ -345,7 +329,7 @@ def generate(
         if len(curr_outputs) > 0:
             prompts, _ = utils.make_prompts(
                 curr_outputs,
-                template=utils.read_or_return(constants.MODELS_CONFIG_DIR / configs["prompt_template"]),
+                template=utils.read_or_return(base_dir / configs["prompt_template"]),
             )
             fn_completions = decoders.get_fn_completions(configs["fn_completions"])
             completions = fn_completions(prompts=prompts, **configs["completions_kwargs"])["completions"]
@@ -402,8 +386,6 @@ def evaluate_from_model(
     is_strip_output: bool = True,
     is_load_outputs: bool = True,
     chunksize: int = 64,
-    clearml_project: str = None,
-    clearml_task: str = None,
     **kwargs,
 ):
     """Evaluate a model from HuggingFace or an API provider. This is a wrapper around `evaluate` which includes
@@ -474,8 +456,6 @@ def evaluate_from_model(
         annotators_config=annotators_config,
         output_path=output_path,
         max_instances=max_instances,
-        clearml_project=clearml_project,
-        clearml_task=clearml_task,
         **kwargs,
     )
 

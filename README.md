@@ -269,6 +269,7 @@ evaluators that are available out of the box and their associated metrics.
 | alpaca_eval_gpt4                |              69.2 |                      13.6 |                           1455 |             0.97 |            0.93 |   28.4 |       14.6 |                   0.68 |
 | alpaca_eval_cot_gpt4_turbo_fn   |              68.6 |                       6.3 |                           1989 |             0.97 |            0.90 |   29.3 |       18.4 |                   0.67 |
 | alpaca_eval_gpt4_turbo_fn       |              68.1 |                       5.5 |                            864 |             0.93 |            0.82 |   30.2 |       15.6 |                   0.65 |
+| alpaca_eval_llama3_70b_fn       |              67.5 |                       0.4 |                            209 |             0.90 |            0.86 |   32.3 |       8.2 |                   0.79 |
 | gpt4                            |              66.9 |                      12.5 |                           1037 |             0.88 |            0.87 |   31.5 |       14.6 |                   0.65 |
 | alpaca_farm_greedy_gpt4         |              66.4 |                      15.3 |                            878 |             0.85 |            0.75 |   30.2 |       19.3 |                   0.60 |
 | alpaca_eval_cot_gpt4_turbo_fn |              65.7 |                       4.3 |                            228 |             0.78 |            0.77 |   33.9 |       23.7 |                   0.61 |
@@ -564,6 +565,7 @@ eval_set = datasets.load_dataset("tatsu-lab/alpaca_eval", "alpaca_eval")["eval"]
 for example in eval_set:
     # generate here is a placeholder for your models generations
     example["output"] = generate(example["instruction"])
+    example["generator"] = "my_model" # name of your model
 ```
 
 if your model is a HuggingFace model or from a standard API provider (OpenAI, Anthropic, Cohere). Then you can
@@ -912,7 +914,7 @@ See [this config](https://github.com/tatsu-lab/alpaca_eval/blob/main/src/alpaca_
 <img align="center" alt="verified.png" src="figures/verified.png" width="500"/>
 </p>
 
-A verified result in AlpacaEval indicates that a core maintainer has decoded the outputs from the model and performed the evaluation. Unfortunately, we, the AlpacaEval maintainers, lack the resources (time/GPU/money) to verify all models. We apologize for any inconvenience this may cause and appreciate your understanding. To have your model verified, please follow the steps below:
+A verified result in AlpacaEval indicates that a core maintainer has decoded the outputs from the model and performed the evaluation. Unfortunately, we, the AlpacaEval maintainers, lack the resources to verify all the models and so we will only do that for models that are in the top-10 of the leaderboard. We apologize for any inconvenience this may cause and appreciate your understanding. To have your model verified, please follow the steps below:
 
 1. Contact `@yann` or `@rtaori` on Discord, or email us if you have our email, providing a brief rationale for why your model should be verified.
 2. Await our response and approval before proceeding.
@@ -1384,9 +1386,9 @@ For all models you can find the auto-annotations under `results/<model_name>/*/a
 - `output_2`: the output of the model being evaluated
 - `annotator`: the auto-annotator
 - `preference`: the result of the auto-annotator. This is a float between 1 and 2. Closer to 1 means that the auto-annotator prefers `output_1`, closer to 2 means that it prefers `output_2`. For AlpacaEval 2.0, `preference-1` corresponds to the probability of `output_1` being preferred. For AlpacaEval 1.0, `preference` is 1 if `output_1` is preferred, 2 if `output_2` is preferred, and 1.5 if they are the same. The win rate is always`(preference -1).mean()`.
-- `raw_completion`: the raw output of the auto-annotator. 
+- `raw_completion`: the raw output of the auto-annotator. This is field contains the completions before de-randomization of the order between `output_1` and `output_2`! It is thus much harder to interpret, see below for more information.
 
-**Chain of through**
+**Chain of thought**
 
 For some annotators, e.g. `alpaca_eval_cot_gpt4_turbo_fn` we use **chain of thought reasoning** to make the models preferences more interpretable. Those can then be found under `concise_explanation`. To interpret them, you should also look at `referenced_models` which translates the temporary model name (in the prompt) to the actual output. Below, we provide more explanation as to what is happening behind the scenes.
 
