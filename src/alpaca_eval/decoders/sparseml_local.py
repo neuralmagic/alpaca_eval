@@ -132,7 +132,7 @@ def sparseml_local_completions(
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = True
 
     model = SparseAutoModelForCausalLM.from_pretrained(
-        model_name_or_path=model_name,
+        model_name,
         **model_kwargs,
     )
 
