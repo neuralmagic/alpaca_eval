@@ -230,6 +230,7 @@ def generate(
     is_strip_output: bool = True,
     is_load_outputs: bool = True,
     chunksize: int = 64,
+    base_dir: str = constants.MODELS_CONFIG_DIR,
 ):
     """Evaluate a model from HuggingFace or an API provider. This is a wrapper around `evaluate` which includes
     generating from
@@ -292,7 +293,6 @@ def generate(
             logging.info("cannot use `chunksize` with max_instances. Setting `chunksize` to None.")
         chunksize = None
 
-    base_dir = Path(kwargs.get("base_dir", constants.MODELS_CONFIG_DIR))
     model_configs = utils.load_configs(model_configs, relative_to=base_dir)
     if reference_model_configs is not None:
         reference_model_configs = utils.load_configs(reference_model_configs, relative_to=base_dir)
@@ -434,6 +434,7 @@ def evaluate_from_model(
         Other kwargs to `evaluate`
     """
 
+    base_dir = Path(kwargs.get("base_dir", constants.MODELS_CONFIG_DIR))
     model_outputs, reference_outputs, output_path = generate(
         model_configs,
         reference_model_configs,
@@ -443,6 +444,7 @@ def evaluate_from_model(
         is_strip_output,
         is_load_outputs,
         chunksize,
+        base_dir,
     )
 
     if reference_model_configs is None:
