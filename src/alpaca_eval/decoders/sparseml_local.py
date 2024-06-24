@@ -7,8 +7,7 @@ import transformers
 import os
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoConfig
-from sparseml.transformers.utils.sparse_model import SparseAutoModel
+from sparseml.transformers import SparseAutoModelForCausalLM, SparseAutoTokenizer
 import sparseml.core.session as session_manager
 
 from accelerate import PartialState
@@ -132,21 +131,14 @@ def sparseml_local_completions(
     #  faster but slightly less accurate matrix multiplications
     torch.backends.cuda.matmul.allow_tf32 = torch.backends.cudnn.allow_tf32 = True
 
-    recipe_file = os.path.join(model_name, "recipe.yaml")
-    if not os.path.exists(recipe_file):
-        recipe_file = None
-    config = AutoConfig.from_pretrained(model_name)
-
-    model = SparseAutoModel.text_generation_from_pretrained(
+    model = SparseAutoModelForCausalLM.from_pretrained(
         model_name_or_path=model_name,
-        config=config,
-        recipe=recipe_file,
         **model_kwargs,
     )
 
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = SparseAutoTokenizer.from_pretrained(
         model_name,
         cache_dir=cache_dir,
         padding_side="left",
@@ -206,10 +198,9 @@ def sparseml_local_completions(
         completions, _ = zip(*sorted(list(zip(completions, original_order)), key=lambda x: x[1]))
         completions = list(completions)
 
-    if recipe_file is not None and os.path.exists(recipe_file):
-        if session_manager.active_session():
-            active_session = session_manager.active_session()
-            active_session.reset()
+    if session_manager.active_session():
+        active_session = session_manager.active_session()
+        active_session.reset()
     torch.cuda.empty_cache()
 
     # local => price is really your compute
