@@ -1,4 +1,4 @@
-llama-2-70b-chat-hf:
+Llama-3.1-70B-Instruct:
   prompt_template: "Llama-3.1-70B-Instruct/prompt.txt"
   fn_completions: "vllm_local_completions"
   completions_kwargs:
@@ -7,6 +7,7 @@ llama-2-70b-chat-hf:
     temperature: 0
     model_kwargs:
       dtype: "bfloat16"
+      tensor_parallel_size: 4
       enable_chunked_prefill: True
   completion_parser_kwargs:
     outputs_to_match:
