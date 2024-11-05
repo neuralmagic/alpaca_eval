@@ -1,0 +1,14 @@
+llama-2-70b-chat-hf:
+  prompt_template: "Llama-3.1-70B-Instruct/prompt.txt"
+  fn_completions: "vllm_local_completions"
+  completions_kwargs:
+    model_name: "meta-llama/Llama-3.1-70B-Instruct"
+    max_new_tokens: 50
+    temperature: 0
+    model_kwargs:
+      dtype: "bfloat16"
+      enable_chunked_prefill: True
+  completion_parser_kwargs:
+    outputs_to_match:
+      1: '(?i)output \(a\)'
+      2: '(?i)output \(b\)'
