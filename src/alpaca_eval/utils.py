@@ -258,18 +258,21 @@ def load_or_convert_to_dataframe(df=Union[AnyPath, AnyData, Callable, list, tupl
                 [load_or_convert_to_dataframe(f, **kwargs) for f in glob.glob(str(df))],
             )
         else:
-            suffix = df.suffix
-            if suffix == ".json":
-                df = pd.read_json(df, **kwargs)
-            elif suffix == ".csv":
-                df = pd.read_csv(df, **kwargs)
+            suffixes = df.suffixes
+            compression = 'gzip' if suffixes[-1] == '.gz' else None
+            base_suffix = suffixes[-2] if compression else suffixes[-1]
+
+            if base_suffix == ".json":
+                df = pd.read_json(df, compression=compression, **kwargs)
+            elif base_suffix == ".csv":
+                df = pd.read_csv(df, compression=compression, **kwargs)
                 if df.columns[0] == "Unnamed: 0":
                     df.set_index(df.columns[0], inplace=True)
                     df.index.name = None
-            elif suffix == ".tsv":
-                df = pd.read_table(df, sep="\t", **kwargs)
+            elif base_suffix == ".tsv":
+                df = pd.read_table(df, sep="\t", compression=compression, **kwargs)
             else:
-                raise ValueError(f"File format {suffix} not supported.")
+                raise ValueError(f"File format {base_suffix} not supported.")
     else:
         df = convert_to_dataframe(df, **kwargs)
 
