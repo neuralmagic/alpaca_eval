@@ -9,6 +9,7 @@ Llama-3.1-70B-Instruct:
       dtype: "bfloat16"
       tensor_parallel_size: 4
       enable_chunked_prefill: True
+      max_model_len: 8196
   completion_parser_kwargs:
     outputs_to_match:
       1: '(?i)output \(a\)'
